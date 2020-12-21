@@ -1,0 +1,151 @@
+import h5py
+from scipy import spatial
+import numpy as np
+import json
+from multiprocessing import Process
+import threading
+from multiprocessing import Queue
+
+def open_json(path):
+    with open(path) as json_file:
+        content = json.load(json_file)
+        return content
+
+def save_string_to_file(text, file_path):
+    file = open(file_path, 'w')
+    file.write(text)
+    file.close()
+
+def compute_cosine_sim_matrix(matrix1, matrix2):
+
+    global_max_sim = 0
+    sims = []
+    for v1 in matrix1:
+        max_sim = 0
+        for v2 in matrix2:
+            sim = compute_cosine_sim(v1, v2)
+
+            if global_max_sim < sim:
+                global_max_sim = sim
+
+            if max_sim < sim:
+                max_sim = sim
+
+        sims.append(max_sim)
+
+    mean_max_sim = np.mean(sims)
+
+    return global_max_sim
+
+def compute_cosine_sim(vec1, vec2):
+    vector_sim = 1 - spatial.distance.cosine(vec1, vec2)
+    if np.isnan(vector_sim):
+        vector_sim = 0
+    return vector_sim
+
+def load_visual_features(lang):
+    visual_features = {}
+
+    location_count = 0
+    object_count = 0
+    scene_count = 0
+
+    data = np.load('feature_files/'+lang+'_visual_features.npy', mmap_mode=None, allow_pickle=True)
+    for d in data:
+        key = d['event'] + "_" + d['article_id']
+
+        if key in visual_features:
+            continue
+
+        scene_features = d['features']['v_scene']
+        object_features = d['features']['v_object']
+        location_features = d['features']['v_location']
+
+        if len(location_features) == 0:
+            location_features = np.zeros((1,2048))
+            location_count +=1
+        else:
+            location_features = np.array(location_features)
+
+        if len(scene_features) == 0:
+            scene_features = np.zeros((1,2048))
+            scene_count +=1
+        else:
+            scene_features = np.array(scene_features)
+
+        if len(object_features) == 0:
+            object_features = np.zeros((1,2048))
+            object_count += 1
+        else:
+            object_features = np.array(object_features)
+
+
+        features = {"scene_features" : scene_features, "object_features": object_features, "location_features": location_features}
+        visual_features[key] = features
+    return visual_features, location_count, object_count, scene_count
+
+def compute_similarity(lang):
+    print(lang)
+    document_names = []
+    with h5py.File('feature_files/' + lang + '_entity_vectors.h5', 'r') as f:
+        document_names.extend(f.keys())
+
+    entity_vector_file = h5py.File('feature_files/' + lang + '_entity_vectors.h5', 'r')
+    bert_vector_file = h5py.File('feature_files/' + lang + '_bert_vectors.h5', 'r')
+    visual_features, location_count, object_count, scene_count = load_visual_features(lang)
+
+    print("Lang:", lang, "#docs:", len(document_names))
+    print("Zero features", location_count, object_count, scene_count)
+
+    all_similarities = {}
+
+    for doc1 in document_names:
+
+        entity_vec1 = np.array(entity_vector_file[str(doc1)])
+        bert_vector1 = np.array(bert_vector_file[str(doc1)])
+        scene_vector1 = np.array(visual_features[doc1]["scene_features"])
+        object_vector1 = np.array(visual_features[doc1]["object_features"])
+        location_vector1 = np.array(visual_features[doc1]["location_features"])
+
+        vector_similarities = []
+        for doc2 in document_names:
+            if doc1 != doc2:
+                entity_vec2 = np.array(entity_vector_file[str(doc2)])
+                bert_vector2 = np.array(bert_vector_file[str(doc2)])
+                scene_vector2 = np.array(visual_features[doc2]["scene_features"])
+                object_vector2 = np.array(visual_features[doc2]["object_features"])
+                location_vector2 = np.array(visual_features[doc2]["location_features"])
+
+                entity_overlap_sim = compute_cosine_sim(entity_vec1, entity_vec2)
+                bert_sim = compute_cosine_sim_matrix(bert_vector1, bert_vector2)
+                scene_sim = compute_cosine_sim(scene_vector1, scene_vector2)
+                location_sim = compute_cosine_sim(location_vector1, location_vector2)
+                object_sim = compute_cosine_sim(object_vector1, object_vector2)
+
+                text_avg_sim = np.mean([entity_overlap_sim, bert_sim])
+                vis_avg_sim = np.mean([scene_sim, location_sim, object_sim])
+
+                total_avg_sim = np.mean([scene_sim, location_sim, object_sim, bert_sim, entity_overlap_sim])
+
+                doc2_article_id = doc2.split("_")[-1]
+                doc2_event = doc2.replace("_" + doc2_article_id, "")
+                item = {"article_id": doc2_article_id, "event": doc2_event, "sim_bert": bert_sim,
+                        "sim_entity": entity_overlap_sim, "sim_obj": object_sim, "sim_loc": location_sim,
+                        "sim_scene": scene_sim}
+                item["sim_avg_text"] = text_avg_sim
+                item["sim_avg_visual"] = vis_avg_sim
+                item["sim_avg_total"] = total_avg_sim
+
+                vector_similarities.append(item)
+
+        doc1_article_id = doc1.split("_")[-1]
+        doc1_similarities = {"article_id": doc1_article_id, "similarity": vector_similarities}
+        all_similarities[doc1] = doc1_similarities
+        print(lang, document_names.index(doc1), "/", len(document_names))
+
+    save_string_to_file(json.dumps(all_similarities), 'similarity_files/' + lang + "_v3.json")
+
+
+if __name__ == '__main__':
+    for lang in ['eng', 'deu']:
+        compute_similarity(lang)
