@@ -18,8 +18,6 @@ def create_latex_table(data_frame):
     output =  ""
     for index, row in data_frame.iterrows():
 
-        # Politics    & \textbf{73}         & 58       & 65      & 48        & 54       & \textbf{56}     \\ \hline
-
         values = data_frame.loc[index][0:6]
         values = [int(i) for i in values]
         max_eng_value = np.max(values[0:3])
