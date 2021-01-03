@@ -1,0 +1,6 @@
+flair==0.4.5
+tensorflow==1.14
+nltk==3.4.5
+sklearn==0.22.1
+pandas==0.24.2
+scipy==1.4.1
