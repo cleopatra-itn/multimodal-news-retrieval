@@ -9,9 +9,8 @@ import glob
 from utils import *
 import os
 
-from scene_classification.scene_embedding import SceneClassificator
 from object_classification.object_embedding import ObjectDetector
-from location_verification.location_embedding import GeoEstimator
+
 
 class features:
     def __init__(self):
