@@ -9,8 +9,6 @@ import glob
 from utils import *
 import os
 
-from object_classification.object_embedding import ObjectDetector
-
 
 class features:
     def __init__(self):
