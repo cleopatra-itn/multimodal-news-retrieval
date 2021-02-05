@@ -299,3 +299,26 @@ class GeoEstimator():
             bboxes.append(bbox)
 
         return tf.concat(img_array, axis=0), bboxes
+
+    
+
+class ObjectDetector:
+
+    def __init__(self, model_path='imagenet'):
+        self._encoder_base = ResNet50(weights=model_path)
+        self._encoder = Model(inputs=self._encoder_base.input, outputs=self._encoder_base.get_layer('avg_pool').output)
+
+    def get_img_embedding(self, img_path):
+        try:
+            img = image.load_img(img_path, target_size=(224, 224))
+            x = image.img_to_array(img)
+            x = np.expand_dims(x, axis=0)
+            x = preprocess_input(x)
+
+            embedding = self._encoder.predict(x)[0]
+            return [np.asarray(embedding, dtype=np.float32)]  # return as list for compatability to face verification
+        except KeyboardInterrupt:
+            raise
+        except:
+            return []
+
