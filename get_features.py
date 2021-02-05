@@ -1,14 +1,19 @@
 from args import get_parser
 args = get_parser().parse_args()
-
 from nltk import tokenize
 from flair.embeddings import FlairEmbeddings, BertEmbeddings
-
 from flair.data import Sentence
 import glob
 from utils import *
 import os
-
+import logging
+import numpy as np
+import sys
+import tensorflow as tf
+from keras.models import Model
+from keras.applications.resnet50 import ResNet50
+from keras.applications.resnet50 import preprocess_input
+from keras.preprocessing import image
 
 class features:
     def __init__(self):
